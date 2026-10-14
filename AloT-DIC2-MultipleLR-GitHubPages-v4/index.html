@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Regression Analysis Explorer</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjs@14.0.1/lib/browser/math.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jstat@1.9.6/dist/jstat.min.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <div class="crumb">Home › Regression Analysis</div>
+      <h1>📈 Regression Analysis Explorer <span class="badge">CRISP-DM</span></h1>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="hero">
+      <h2>Feature Selection & Regression Analysis</h2>
+      <p>
+        比較不同 Feature 數量下的 Multiple Linear Regression 表現，
+        並支援 50 Startups、Boston Housing 與自訂 CSV Dataset。
+      </p>
+      <div class="hero-tags">
+        <span>2 Problems</span>
+        <span>Custom CSV URL</span>
+        <span>Feature Progression</span>
+        <span>GitHub Pages Ready</span>
+      </div>
+    </section>
+
+    <section class="panel controls">
+      <div class="control-group">
+        <label for="problemSelect">1. Problem</label>
+        <select id="problemSelect">
+          <option value="startup">50 Startups</option>
+          <option value="boston">Boston Housing</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label>2. Dataset Source</label>
+        <div class="radio-row">
+          <label><input type="radio" name="datasetMode" value="default" checked> Default Dataset</label>
+          <label><input type="radio" name="datasetMode" value="custom"> Custom Dataset URL</label>
+        </div>
+        <input id="datasetUrl" class="hidden" type="text" placeholder="https://.../data.csv" />
+        <button id="loadBtn">Load Dataset</button>
+      </div>
+
+      <div class="control-group">
+        <label for="targetSelect">3. Target Column</label>
+        <select id="targetSelect"></select>
+      </div>
+
+      <div class="control-group">
+        <label for="maxKSelect">4. Maximum Feature Count</label>
+        <select id="maxKSelect">
+          <option>1</option><option>2</option><option>3</option>
+          <option>4</option><option selected>5</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-title-row">
+        <div>
+          <h3>Dataset Preview</h3>
+          <p id="datasetMeta" class="muted">Loading...</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="previewTable"></table>
+      </div>
+    </section>
+
+    <section class="metric-grid">
+      <div class="metric-card"><div class="metric-label">BEST k</div><div id="bestK" class="metric-value">-</div></div>
+      <div class="metric-card"><div class="metric-label">TEST RMSE</div><div id="bestRmse" class="metric-value">-</div></div>
+      <div class="metric-card"><div class="metric-label">R² SCORE</div><div id="bestR2" class="metric-value">-</div></div>
+      <div class="metric-card"><div class="metric-label">ADJUSTED R²</div><div id="bestAdjR2" class="metric-value">-</div></div>
+      <div class="metric-card"><div class="metric-label">MAE</div><div id="bestMae" class="metric-value">-</div></div>
+      <div class="metric-card"><div class="metric-label">F-STATISTIC</div><div id="fStatistic" class="metric-value">-</div><div id="fPValue" class="metric-sub">-</div></div>
+    </section>
+
+
+    <section class="panel">
+      <h3>Feature Selection Algorithm</h3>
+      <p class="muted">Choose a feature-selection method. The same train/test split is used for fair comparison.</p>
+
+      <div class="method-buttons" id="methodButtons">
+        <button class="method-btn active" data-method="lasso">Lasso <span>L1 Ranking</span></button>
+        <button class="method-btn" data-method="sfs">Forward SFS <span>Greedy</span></button>
+        <button class="method-btn" data-method="rfe">RFE <span>Backward</span></button>
+        <button class="method-btn" data-method="elastic">ElasticNet <span>L1 + L2</span></button>
+        <button class="method-btn" data-method="exhaustive">Exhaustive Search <span>Best Subset</span></button>
+      </div>
+
+      <button id="compareMethodsBtn" class="compare-btn">Compare All 5 Methods</button>
+
+      <div id="methodDescription" class="method-description"></div>
+
+      <div id="methodComparisonWrap" class="table-wrap hidden">
+        <h4>Method Comparison</h4>
+        <table id="methodComparisonTable"></table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3>Feature Progression (k = 1 to N)</h3>
+      <p class="muted">
+        每個 k 會從目前可用的數值 Feature 中，以 Exhaustive Search 找出 Test RMSE 最低的組合。
+      </p>
+      <div id="kButtons" class="k-buttons"></div>
+      <div id="activeFeatures" class="active-features"></div>
+    </section>
+
+    <section class="chart-grid">
+      <div class="panel chart-card">
+        <h3>RMSE by Number of Features</h3>
+        <canvas id="rmseChart"></canvas>
+      </div>
+      <div class="panel chart-card">
+        <h3>R-squared by Number of Features</h3>
+        <canvas id="r2Chart"></canvas>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3>Fitted OLS Regression Equation</h3>
+      <div id="equation" class="equation">-</div>
+    </section>
+
+
+    <section class="panel">
+      <div class="section-title-row">
+        <div>
+          <h3>Model Coefficients & Statistical Tests</h3>
+          <p class="muted">OLS coefficient estimates, standard errors, t-statistics, p-values, 95% confidence intervals, and VIF.</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="statsTable"></table>
+      </div>
+    </section>
+
+    <section class="two-col">
+      <section class="panel">
+        <h3>Selected Features</h3>
+        <div id="featureTableWrap" class="table-wrap"></div>
+      </section>
+
+      <section class="panel">
+        <h3>Live Predictor</h3>
+        <div id="predictorFields"></div>
+        <button id="predictBtn">Predict</button>
+        <div class="prediction-box">
+          <div class="muted">PREDICTED VALUE</div>
+          <div id="predictionValue" class="prediction-value">-</div>
+        </div>
+      </section>
+    </section>
+
+    <section class="panel">
+      <h3>Test Set Results & Residuals</h3>
+      <div class="table-wrap">
+        <table id="resultsTable"></table>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    50 Startups / Boston Housing Regression Project · HTML · CSS · JavaScript · Chart.js
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
